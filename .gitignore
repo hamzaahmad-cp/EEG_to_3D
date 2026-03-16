@@ -1,0 +1,26 @@
+# Data (downloaded from Kaggle at runtime)
+data/
+checkpoints/
+
+# Outputs
+outputs/
+Wonder3D/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.eggs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Credentials
+kaggle.json
