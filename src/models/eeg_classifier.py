@@ -1,6 +1,5 @@
 """
 EEG Classification model for CATVis.
-Uses braindecode EEGConformer directly without modifying internal layers.
 """
 
 import torch
@@ -15,9 +14,10 @@ class EEGClassifier(nn.Module):
         model_config = config['eeg_classification']
         model_params = model_config['model_params']
 
-        # Build EEGConformer — outputs n_outputs directly
+        # Set n_outputs=768 so conformer outputs CLIP-sized embeddings directly
+        # This avoids the 40-dim bottleneck that killed accuracy
         self.conformer = EEGConformer(
-            n_outputs=model_config['n_outputs'],
+            n_outputs=768,
             n_chans=model_config['n_chans'],
             n_times=model_config['n_times'],
             n_filters_time=model_params['n_filters_time'],
@@ -27,19 +27,13 @@ class EEGClassifier(nn.Module):
             final_fc_length=model_params['final_fc_length'],
         )
 
-        # Find the embedding dim from the conformer's FC block
-        # and add a projection to 768 for CLIP alignment
-        self.embed_proj = nn.Linear(model_config['n_outputs'], 768)
+        # Classification head on top of 768-dim embeddings
         self.classifier_head = nn.Linear(768, model_config['n_outputs'])
 
     def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        # Conformer outputs [B, n_outputs]
-        logits = self.conformer(x)
-        if isinstance(logits, tuple):
-            logits = logits[0]
-        # Project to 768-dim CLIP space
-        embeddings = self.embed_proj(logits)
-        # Classify from embeddings
+        embeddings = self.conformer(x)
+        if isinstance(embeddings, tuple):
+            embeddings = embeddings[0]
         outputs = self.classifier_head(embeddings)
         return outputs, embeddings
 

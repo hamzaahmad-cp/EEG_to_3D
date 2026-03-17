@@ -15,8 +15,9 @@ class ContrastiveEncoder(nn.Module):
         model_config = config['eeg_classification']
         model_params = model_config['model_params']
 
+        # Same as classifier: n_outputs=768 for CLIP-aligned embeddings
         self.conformer = EEGConformer(
-            n_outputs=model_config['n_outputs'],
+            n_outputs=768,
             n_chans=model_config['n_chans'],
             n_times=model_config['n_times'],
             n_filters_time=model_params['n_filters_time'],
@@ -25,15 +26,12 @@ class ContrastiveEncoder(nn.Module):
             pool_time_stride=model_params['pool_time_stride'],
             final_fc_length=model_params['final_fc_length'],
         )
-
-        # Project conformer output to 768-dim CLIP space
-        self.embed_proj = nn.Linear(model_config['n_outputs'], 768)
+        # No classification head — just output 768-dim embeddings
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        logits = self.conformer(x)
-        if isinstance(logits, tuple):
-            logits = logits[0]
-        embeddings = self.embed_proj(logits)
+        embeddings = self.conformer(x)
+        if isinstance(embeddings, tuple):
+            embeddings = embeddings[0]
         return embeddings
 
 
