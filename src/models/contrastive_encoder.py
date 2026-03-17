@@ -8,44 +8,33 @@ import torch.nn.functional as F
 from braindecode.models import EEGConformer
 from typing import Dict, Any, Tuple
 
-from src.models.eeg_classifier import _make_conformer
-
 
 class ContrastiveEncoder(nn.Module):
-    """
-    EEG Encoder for contrastive learning with text embeddings.
-    Based on EEGConformer, modified to output 768-dimensional embeddings
-    aligned with CLIP text embeddings.
-    """
-
     def __init__(self, config: Dict[str, Any]):
-        super(ContrastiveEncoder, self).__init__()
-        self.config = config
-
+        super().__init__()
         model_config = config['eeg_classification']
         model_params = model_config['model_params']
 
-        self.model = _make_conformer(model_config, model_params)
+        self.conformer = EEGConformer(
+            n_outputs=model_config['n_outputs'],
+            n_chans=model_config['n_chans'],
+            n_times=model_config['n_times'],
+            n_filters_time=model_params['n_filters_time'],
+            filter_time_length=model_params['filter_time_length'],
+            pool_time_length=model_params['pool_time_length'],
+            pool_time_stride=model_params['pool_time_stride'],
+            final_fc_length=model_params['final_fc_length'],
+        )
 
-        # Modify final layers to produce 768-dimensional features (CLIP-aligned)
-        self.model.fc.fc[3] = nn.Linear(in_features=256, out_features=768, bias=True)
-        self.model.final_layer.final_layer[0] = nn.Linear(in_features=768, out_features=model_config['n_outputs'], bias=True)
-
-        # Remove final classification layer, leaving us with 768-d embeddings
-        self.model.final_layer = nn.Identity()
+        # Project conformer output to 768-dim CLIP space
+        self.embed_proj = nn.Linear(model_config['n_outputs'], 768)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        out = self.model(x)
-        if isinstance(out, tuple):
-            return out[1]  # embeddings
-        return out
-
-    def load_pretrained_weights(self, checkpoint_path: str):
-        state_dict = torch.load(checkpoint_path, map_location='cpu')
-        self.model.load_state_dict(state_dict)
-
-    def save_checkpoint(self, checkpoint_path: str):
-        torch.save(self.model.state_dict(), checkpoint_path)
+        logits = self.conformer(x)
+        if isinstance(logits, tuple):
+            logits = logits[0]
+        embeddings = self.embed_proj(logits)
+        return embeddings
 
 
 def clip_style_contrastive_loss(eeg_embeds: torch.Tensor, text_embeds: torch.Tensor,
