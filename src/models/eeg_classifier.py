@@ -23,7 +23,8 @@ class EEGClassifier(nn.Module):
         model_params = model_config['model_params']
         
         # Create base EEGConformer model
-        self.model = EEGConformer(
+        # Compatible with both old (add_log_softmax) and new braindecode versions
+        conformer_kwargs = dict(
             n_outputs=model_config['n_outputs'],
             n_chans=model_config['n_chans'],
             n_times=model_config['n_times'],
@@ -32,9 +33,13 @@ class EEGClassifier(nn.Module):
             pool_time_length=model_params['pool_time_length'],
             pool_time_stride=model_params['pool_time_stride'],
             final_fc_length=model_params['final_fc_length'],
-            add_log_softmax=False,
-            return_features=True
+            return_features=True,
         )
+        import inspect
+        sig = inspect.signature(EEGConformer.__init__)
+        if 'add_log_softmax' in sig.parameters:
+            conformer_kwargs['add_log_softmax'] = False
+        self.model = EEGConformer(**conformer_kwargs)
         
         # Modify final layers to produce 768-dimensional features (CLIP-aligned)
         self.model.fc.fc[3] = nn.Linear(in_features=256, out_features=768, bias=True)
